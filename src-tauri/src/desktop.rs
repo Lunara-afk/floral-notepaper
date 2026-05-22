@@ -140,6 +140,8 @@ struct RuntimeState {
     hidden_window_labels: Mutex<Vec<String>>,
     #[cfg(desktop)]
     shortcut_bindings: Mutex<ShortcutBindings>,
+    #[cfg(desktop)]
+    last_notepad_open: Mutex<Option<std::time::Instant>>,
 }
 
 #[cfg(desktop)]
@@ -1188,14 +1190,34 @@ fn setup_global_shortcut_plugin(app: &AppHandle) -> tauri::Result<()> {
                         }
                     }
                     ShortcutAction::OpenNotepad => {
-                        if let Err(error) = app.run_on_main_thread(move || {
-                            if let Err(error) =
-                                open_notepad_window_now(&app_for_closure, None, None)
-                            {
-                                eprintln!("failed to open notepad from global shortcut: {error}");
+                        // 防抖：800ms 内忽略重复触发，防止快速连按创建大量窗口
+                        let should_open = app
+                            .try_state::<RuntimeState>()
+                            .map(|state| {
+                                let mut guard = state.last_notepad_open.lock().unwrap();
+                                let now = std::time::Instant::now();
+                                if let Some(last) = *guard {
+                                    if now.duration_since(last).as_millis() < 800 {
+                                        return false;
+                                    }
+                                }
+                                *guard = Some(now);
+                                true
+                            })
+                            .unwrap_or(true);
+
+                        if should_open {
+                            if let Err(error) = app.run_on_main_thread(move || {
+                                if let Err(error) =
+                                    open_notepad_window_now(&app_for_closure, None, None)
+                                {
+                                    eprintln!(
+                                        "failed to open notepad from global shortcut: {error}"
+                                    );
+                                }
+                            }) {
+                                eprintln!("failed to dispatch global shortcut action: {error}");
                             }
-                        }) {
-                            eprintln!("failed to dispatch global shortcut action: {error}");
                         }
                     }
                 }
