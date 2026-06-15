@@ -76,7 +76,6 @@ const sanitizeSchema = {
     ...defaultSchema.attributes,
     "*": [
       ...(defaultSchema.attributes?.["*"] ?? []),
-      "style",
       "className",
       "data-alert-type",
       "dataAlertType",
