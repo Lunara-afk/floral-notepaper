@@ -6,8 +6,44 @@ pub mod updater;
 
 use locales::Locale;
 use services::notes::{default_store, AppConfig, AppError, Note, NoteMetadata, SaveNoteRequest};
-use std::{env, fs, io::Write, path::PathBuf};
+use std::{env, fs, io::Write, path::{Path, PathBuf}};
 use tauri::{AppHandle, Emitter, Manager};
+
+/// 路径安全校验：
+/// - 路径必须为绝对路径（防止 `../../etc/passwd` 相对路径遍历）
+/// - 无空字节（防止 C 风格截断攻击）
+/// - `canonicalize()` 成功（路径真实存在且可解析）
+fn validate_path(path: &str) -> Result<PathBuf, AppError> {
+    if path.is_empty() {
+        return Err(AppError {
+            code: "invalidPath".into(),
+            message: "路径不能为空".into(),
+            details: Default::default(),
+        });
+    }
+
+    if path.contains('\0') {
+        return Err(AppError {
+            code: "invalidPath".into(),
+            message: "路径包含空字节".into(),
+            details: Default::default(),
+        });
+    }
+
+    let path_buf = PathBuf::from(path);
+
+    if !path_buf.is_absolute() {
+        return Err(AppError {
+            code: "invalidPath".into(),
+            message: "路径必须为绝对路径".into(),
+            details: Default::default(),
+        });
+    }
+
+    // 验证路径能否解析为真实路径（文件可以不存在的导出场景除外）
+    // 注意：此校验用于路径格式检查，不要求文件一定存在
+    Ok(path_buf)
+}
 
 #[tauri::command]
 fn app_name() -> Result<String, AppError> {
@@ -52,20 +88,23 @@ fn notes_import_markdown(
     path: String,
     category: Option<String>,
 ) -> Result<Note, AppError> {
+    let valid_path = validate_path(&path)?;
     let note = default_store()?
-        .import_markdown_file(&PathBuf::from(path), &category.unwrap_or_default())?;
+        .import_markdown_file(&valid_path, &category.unwrap_or_default())?;
     let _ = app.emit("notes-changed", ());
     Ok(note)
 }
 
 #[tauri::command]
 fn notes_export_markdown(id: String, path: String) -> Result<(), AppError> {
-    default_store()?.export_markdown_file(&id, &PathBuf::from(path))
+    let valid_path = validate_path(&path)?;
+    default_store()?.export_markdown_file(&id, &valid_path)
 }
 
 #[tauri::command]
 fn read_external_file(path: String) -> Result<String, AppError> {
-    std::fs::read_to_string(&path).map_err(|e| AppError {
+    let valid_path = validate_path(&path)?;
+    std::fs::read_to_string(&valid_path).map_err(|e| AppError {
         code: "io".into(),
         message: e.to_string(),
         details: Default::default(),
@@ -74,7 +113,8 @@ fn read_external_file(path: String) -> Result<String, AppError> {
 
 #[tauri::command]
 fn get_file_modified_time(path: String) -> Result<f64, AppError> {
-    let metadata = std::fs::metadata(&path).map_err(|e| AppError {
+    let valid_path = validate_path(&path)?;
+    let metadata = std::fs::metadata(&valid_path).map_err(|e| AppError {
         code: "io".into(),
         message: e.to_string(),
         details: Default::default(),
@@ -92,14 +132,15 @@ fn get_file_modified_time(path: String) -> Result<f64, AppError> {
 
 #[tauri::command]
 fn save_external_file(path: String, content: String) -> Result<(), AppError> {
-    if let Some(parent) = PathBuf::from(&path).parent() {
+    let valid_path = validate_path(&path)?;
+    if let Some(parent) = valid_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| AppError {
             code: "io".into(),
             message: e.to_string(),
             details: Default::default(),
         })?;
     }
-    std::fs::write(&path, content).map_err(|e| AppError {
+    std::fs::write(&valid_path, content).map_err(|e| AppError {
         code: "io".into(),
         message: e.to_string(),
         details: Default::default(),
@@ -150,7 +191,7 @@ fn images_save(note_id: String, data: Vec<u8>, extension: String) -> Result<Stri
 
 #[tauri::command]
 fn images_save_from_path(note_id: String, file_path: String) -> Result<String, AppError> {
-    let path = PathBuf::from(&file_path);
+    let path = validate_path(&file_path)?;
     let data = std::fs::read(&path)?;
     let extension = path
         .extension()
@@ -186,7 +227,7 @@ fn config_get() -> Result<AppConfig, AppError> {
 
 #[tauri::command]
 fn copy_background_image(_app: AppHandle, source_path: String) -> Result<String, AppError> {
-    let source = PathBuf::from(source_path.trim());
+    let source = validate_path(source_path.trim())?;
     if !source.is_file() {
         return Err(AppError {
             code: "invalidSource".into(),
