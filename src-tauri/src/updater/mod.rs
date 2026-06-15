@@ -63,7 +63,7 @@ pub(super) fn sha256_hex(path: &Path) -> Result<String, std::io::Error> {
     }
     Ok(hex)
 }
-pub use scheduler::start_auto_check_scheduler;
+pub use scheduler::{reset_scheduler_shutdown, start_auto_check_scheduler, stop_auto_check_scheduler};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateTaskKind {

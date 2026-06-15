@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "version:sync": "node scripts/set-version.mjs",
+    "preversion": "node scripts/set-version.mjs --check",
     "prepare": "husky"
   },
   "dependencies": {

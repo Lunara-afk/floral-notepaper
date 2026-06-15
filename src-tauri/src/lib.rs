@@ -6,13 +6,15 @@ pub mod updater;
 
 use locales::Locale;
 use services::notes::{default_store, AppConfig, AppError, Note, NoteMetadata, SaveNoteRequest};
-use std::{env, fs, io::Write, path::{Path, PathBuf}};
+use std::{env, fs, io::Write, path::PathBuf};
 use tauri::{AppHandle, Emitter, Manager};
 
-/// 路径安全校验：
-/// - 路径必须为绝对路径（防止 `../../etc/passwd` 相对路径遍历）
+/// 路径安全校验（格式检查层）：
+/// - 路径不可为空
 /// - 无空字节（防止 C 风格截断攻击）
-/// - `canonicalize()` 成功（路径真实存在且可解析）
+/// - 路径必须为绝对路径（防止 `../../etc/passwd` 相对路径遍历）
+/// - 无父目录遍历组件（`..`）
+/// 注意：此函数不要求文件存在，仅做路径格式校验。
 fn validate_path(path: &str) -> Result<PathBuf, AppError> {
     if path.is_empty() {
         return Err(AppError {
@@ -40,9 +42,30 @@ fn validate_path(path: &str) -> Result<PathBuf, AppError> {
         });
     }
 
-    // 验证路径能否解析为真实路径（文件可以不存在的导出场景除外）
-    // 注意：此校验用于路径格式检查，不要求文件一定存在
+    // 拦截父目录遍历（`..`）：`C:\Users\..\..\Windows` 等绕过
+    for component in path_buf.components() {
+        if component == std::path::Component::ParentDir {
+            return Err(AppError {
+                code: "invalidPath".into(),
+                message: "路径包含父目录遍历（..）".into(),
+                details: Default::default(),
+            });
+        }
+    }
+
     Ok(path_buf)
+}
+
+/// 解析并验证路径真实存在（resolve 层）：
+/// - 调用 `canonicalize()` 解析 symlink / junction / `..` 别名
+/// - 确认文件或目录确实存在
+/// 适用于需要源文件存在的读场景。
+fn resolve_existing_path(path: &PathBuf) -> Result<PathBuf, AppError> {
+    path.canonicalize().map_err(|e| AppError {
+        code: "invalidPath".into(),
+        message: format!("路径无法解析: {e}"),
+        details: Default::default(),
+    })
 }
 
 #[tauri::command]
@@ -89,6 +112,7 @@ fn notes_import_markdown(
     category: Option<String>,
 ) -> Result<Note, AppError> {
     let valid_path = validate_path(&path)?;
+    let valid_path = resolve_existing_path(&valid_path)?;
     let note = default_store()?
         .import_markdown_file(&valid_path, &category.unwrap_or_default())?;
     let _ = app.emit("notes-changed", ());
@@ -104,6 +128,7 @@ fn notes_export_markdown(id: String, path: String) -> Result<(), AppError> {
 #[tauri::command]
 fn read_external_file(path: String) -> Result<String, AppError> {
     let valid_path = validate_path(&path)?;
+    let valid_path = resolve_existing_path(&valid_path)?;
     std::fs::read_to_string(&valid_path).map_err(|e| AppError {
         code: "io".into(),
         message: e.to_string(),
@@ -114,6 +139,7 @@ fn read_external_file(path: String) -> Result<String, AppError> {
 #[tauri::command]
 fn get_file_modified_time(path: String) -> Result<f64, AppError> {
     let valid_path = validate_path(&path)?;
+    let valid_path = resolve_existing_path(&valid_path)?;
     let metadata = std::fs::metadata(&valid_path).map_err(|e| AppError {
         code: "io".into(),
         message: e.to_string(),
@@ -192,6 +218,7 @@ fn images_save(note_id: String, data: Vec<u8>, extension: String) -> Result<Stri
 #[tauri::command]
 fn images_save_from_path(note_id: String, file_path: String) -> Result<String, AppError> {
     let path = validate_path(&file_path)?;
+    let path = resolve_existing_path(&path)?;
     let data = std::fs::read(&path)?;
     let extension = path
         .extension()
@@ -228,6 +255,7 @@ fn config_get() -> Result<AppConfig, AppError> {
 #[tauri::command]
 fn copy_background_image(_app: AppHandle, source_path: String) -> Result<String, AppError> {
     let source = validate_path(source_path.trim())?;
+    let source = resolve_existing_path(&source)?;
     if !source.is_file() {
         return Err(AppError {
             code: "invalidSource".into(),
@@ -526,7 +554,7 @@ pub fn run() {
             }
 
             if matches!(_event, tauri::RunEvent::Exit) {
-                updater::scheduler::stop_auto_check_scheduler();
+                crate::updater::stop_auto_check_scheduler();
             }
         });
 }

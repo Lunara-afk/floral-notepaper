@@ -28,7 +28,14 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="flex items-center justify-center h-screen text-ink-faint select-none">
             <div className="text-center">
               <div className="text-[48px] mb-4">🌸</div>
-              <p className="text-sm">应用遇到错误，请重启</p>
+              <p className="text-sm">应用遇到错误</p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-4 px-4 py-1.5 rounded text-sm bg-paper-deep/50 text-ink-soft hover:bg-paper-deep/70 hover:text-ink transition-all cursor-pointer"
+              >
+                重新加载
+              </button>
             </div>
           </div>
         )
