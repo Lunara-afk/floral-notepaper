@@ -26,12 +26,13 @@ function CodeBlock({ children, language }: { children: React.ReactNode; language
   }, [children]);
 
   return (
-    <pre
-      className={`my-3 px-4 rounded bg-paper-warm/80 overflow-x-auto relative group ${
-        language ? "pt-8 pb-3" : "py-3"
-      }`}
-    >
-      {language && (
+    <div className="relative">
+      <pre
+        className={`my-3 px-4 rounded bg-paper-warm/80 overflow-x-auto group ${
+          language ? "pt-8 pb-3" : "py-3"
+        }`}
+      >
+        {language && (
         <span className="absolute top-2 left-3 text-[10px] font-mono text-ink-faint/70 uppercase tracking-wider select-none">
           {language}
         </span>
@@ -47,6 +48,7 @@ function CodeBlock({ children, language }: { children: React.ReactNode; language
       </button>
       {children}
     </pre>
+    </div>
   );
 }
 
@@ -84,7 +86,11 @@ const sanitizeSchema = {
     abbr: ["title"],
   },
 };
-const rehypePluginsDefault = [rehypeKatex, rehypeSlug];
+const rehypePluginsDefault = [
+  [rehypeSanitize, sanitizeSchema],
+  rehypeKatex,
+  rehypeSlug,
+];
 const rehypePluginsWithHtml = [
   rehypeRaw,
   [rehypeSanitize, sanitizeSchema],

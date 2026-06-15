@@ -6,7 +6,7 @@ pub mod updater;
 
 use locales::Locale;
 use services::notes::{default_store, AppConfig, AppError, Note, NoteMetadata, SaveNoteRequest};
-use std::{env, fs, io::Write, path::PathBuf};
+use std::{env, fs, io::Write, path::{Path, PathBuf}};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// 路径安全校验（格式检查层）：
@@ -125,15 +125,38 @@ fn notes_export_markdown(id: String, path: String) -> Result<(), AppError> {
     default_store()?.export_markdown_file(&id, &valid_path)
 }
 
+/// 读取文件内容，支持 UTF-8 和广泛使用的中文编码（GBK / GB18030）
+pub(crate) fn read_file_with_encoding_fallback(path: &Path) -> Result<String, AppError> {
+    let bytes = std::fs::read(path).map_err(|e| AppError {
+        code: "io".into(),
+        message: e.to_string(),
+        details: Default::default(),
+    })?;
+
+    // 首选 UTF-8 解码（最常见的场景）
+    if let Ok(s) = std::str::from_utf8(&bytes) {
+        return Ok(s.to_owned());
+    }
+
+    // 回退到 GBK/GB18030（中文 Windows 默认编码）
+    let (cow, _, had_errors) = encoding_rs::GBK.decode(&bytes);
+    if !had_errors {
+        return Ok(cow.into_owned());
+    }
+
+    // 全量回退：所有编码尝试失败，返回原始错误
+    Err(AppError {
+        code: "io".into(),
+        message: "无法识别文件编码，仅支持 UTF-8 和 GBK".into(),
+        details: Default::default(),
+    })
+}
+
 #[tauri::command]
 fn read_external_file(path: String) -> Result<String, AppError> {
     let valid_path = validate_path(&path)?;
     let valid_path = resolve_existing_path(&valid_path)?;
-    std::fs::read_to_string(&valid_path).map_err(|e| AppError {
-        code: "io".into(),
-        message: e.to_string(),
-        details: Default::default(),
-    })
+    read_file_with_encoding_fallback(&valid_path)
 }
 
 #[tauri::command]

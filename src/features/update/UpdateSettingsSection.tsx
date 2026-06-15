@@ -295,7 +295,7 @@ export function UpdateSettingsSection({
     value: UpdateSettings[Key],
   ) => {
     if (!settings) return;
-    void persistSettings({ ...settings, [key]: value });
+    void persistSettings({ ...settings, [key]: value }).catch(() => {});
   };
 
   const handleIntervalChange = (value: IntervalOption) => {

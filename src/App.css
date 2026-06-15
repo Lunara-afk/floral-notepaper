@@ -619,6 +619,7 @@ input::placeholder {
 }
 .katex-display > .katex {
   white-space: normal;
+  min-height: 1em;
 }
 .katex {
   font-size: 1.1em;

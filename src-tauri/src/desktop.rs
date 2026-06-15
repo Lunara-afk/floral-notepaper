@@ -1472,7 +1472,6 @@ fn activate_pooled_notepad(app: &AppHandle, bounds: Option<WindowBounds>) -> Opt
     let _ = window.set_size(tauri::LogicalSize::new(specs.width, specs.height));
     let _ = apply_window_bounds(&window, bounds);
     let _ = window.show();
-    let _ = window.set_focus();
     let _ = window.emit("notepad:activate", label.clone());
 
     schedule_notepad_replenish(app, 100);
@@ -1786,7 +1785,6 @@ fn open_or_focus_window(
         window.set_shadow(opts.shadow)?;
         window.unminimize()?;
         window.show()?;
-        window.set_focus()?;
         return Ok(label.to_string());
     }
 

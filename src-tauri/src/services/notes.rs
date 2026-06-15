@@ -874,7 +874,7 @@ impl NoteStore {
             return Err(AppError::unsupported_file());
         }
 
-        let content = fs::read_to_string(path)?;
+        let content = crate::read_file_with_encoding_fallback(path)?;
         let title = imported_markdown_title(path, &content);
         self.create_note(SaveNoteRequest {
             title,
@@ -973,15 +973,40 @@ impl NoteStore {
                 ));
             }
 
-            // Move all notes in this category to uncategorized (root)
+            // Collect all notes that need to be moved out of the category
             let mut metadata_file = self.load_metadata()?;
-            for note in &mut metadata_file.notes {
+            let mut to_move: Vec<(PathBuf, PathBuf)> = Vec::new();
+            for note in &metadata_file.notes {
                 if note.category == name {
                     let old_path = category_path.join(&note.file_name);
                     let new_path = notes_dir.join(&note.file_name);
                     if old_path.exists() {
-                        fs::rename(&old_path, &new_path)?;
+                        to_move.push((old_path, new_path));
                     }
+                }
+            }
+
+            // Batch rename with rollback: try each, revert on first failure
+            let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
+            for (old_path, new_path) in &to_move {
+                match fs::rename(old_path, new_path) {
+                    Ok(()) => moved.push((old_path.clone(), new_path.clone())),
+                    Err(e) => {
+                        // Rollback: restore already-moved files
+                        for (rolled_old, rolled_new) in &moved {
+                            let _ = fs::rename(rolled_new, rolled_old);
+                        }
+                        return Err(AppError::new(
+                            "io",
+                            format!("移动笔记失败: {e}"),
+                        ));
+                    }
+                }
+            }
+
+            // All renames succeeded — update metadata and clean up
+            for note in &mut metadata_file.notes {
+                if note.category == name {
                     note.category = String::new();
                 }
             }
