@@ -427,7 +427,7 @@ const TRAY_QUIT_ID: &str = "quit";
 
 #[cfg(target_os = "macos")]
 static FULLSCREEN_HIDING: AtomicBool = AtomicBool::new(false);
-const NOTEPAD_POOL_CAPACITY: usize = 2;
+const NOTEPAD_POOL_CAPACITY: usize = 3;
 
 /// Stores the file path passed as a command-line argument on cold start.
 /// The frontend retrieves and clears this value after initialization via
@@ -583,6 +583,13 @@ impl NotepadPool {
             }
         }
         false
+    }
+
+    fn is_empty(&self) -> bool {
+        self.available
+            .lock()
+            .map(|a| a.is_empty())
+            .unwrap_or(true)
     }
 
     fn is_below_capacity(&self) -> bool {
@@ -1435,6 +1442,13 @@ fn open_notepad_window_now(
             clear_hidden_window_state(app);
             return Ok(reused);
         }
+        // 池中无可用窗口时跳过创建新窗口，避免主线程阻塞导致卡死
+        if pool_is_empty(app) {
+            return Err(AppError::new(
+                "poolExhausted",
+                "窗口池已空，请稍后重试",
+            ));
+        }
     }
 
     let locale = configured_locale();
@@ -1471,10 +1485,11 @@ fn activate_pooled_notepad(app: &AppHandle, bounds: Option<WindowBounds>) -> Opt
     let _ = window.set_title(locales::notepad_window_title(locale));
     let _ = window.set_size(tauri::LogicalSize::new(specs.width, specs.height));
     let _ = apply_window_bounds(&window, bounds);
+    // 必须先 show 让窗口管理器完成窗口初始化，再由前端处理焦点
     let _ = window.show();
     let _ = window.emit("notepad:activate", label.clone());
 
-    schedule_notepad_replenish(app, 100);
+    schedule_notepad_replenish(app, 50);
 
     Some(label)
 }
@@ -1550,6 +1565,11 @@ fn schedule_notepad_replenish(app: &AppHandle, delay_ms: u64) {
             }
         });
     });
+}
+
+fn pool_is_empty(app: &AppHandle) -> bool {
+    app.try_state::<NotepadPool>()
+        .is_some_and(|pool| pool.is_empty())
 }
 
 fn prewarm_notepad(app: &AppHandle) -> Result<(), AppError> {

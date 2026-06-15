@@ -45,13 +45,13 @@ export function insertTextAtCursor(
   setContent: (value: string) => void,
   text: string,
 ) {
-  const before = textarea.value.slice(0, textarea.selectionStart);
-  const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const head = textarea.value.slice(0, textarea.selectionStart);
+  const needsLeadingNewline = head.length > 0 && !head.endsWith("\n");
   const insertion = (needsLeadingNewline ? "\n" : "") + text + "\n";
 
   textarea.focus();
   // 注: execCommand 已弃用，改用直接值操作
-  const start = textarea.selectionStart ?? textarea.value.length;
   const before = textarea.value.slice(0, start);
   const after = textarea.value.slice(textarea.selectionEnd ?? 0);
   textarea.value = before + insertion + after;

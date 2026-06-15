@@ -90,7 +90,7 @@ const rehypePluginsDefault = [
   [rehypeSanitize, sanitizeSchema],
   rehypeKatex,
   rehypeSlug,
-];
+] as Parameters<typeof Markdown>[0]["rehypePlugins"];
 const rehypePluginsWithHtml = [
   rehypeRaw,
   [rehypeSanitize, sanitizeSchema],
