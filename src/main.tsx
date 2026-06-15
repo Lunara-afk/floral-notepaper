@@ -4,6 +4,7 @@ import { I18nextProvider } from "react-i18next";
 import App from "./App";
 import { getConfig } from "./features/settings/api";
 import i18n, { initializeI18n } from "./locales";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const rootElement = document.getElementById("root");
 
@@ -27,9 +28,11 @@ async function bootstrap() {
 
   ReactDOM.createRoot(mountTarget).render(
     <React.StrictMode>
-      <I18nextProvider i18n={i18n}>
-        <App />
-      </I18nextProvider>
+      <ErrorBoundary>
+        <I18nextProvider i18n={i18n}>
+          <App />
+        </I18nextProvider>
+      </ErrorBoundary>
     </React.StrictMode>,
   );
 }
