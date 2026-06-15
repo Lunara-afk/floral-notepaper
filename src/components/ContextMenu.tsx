@@ -160,6 +160,7 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
           break;
       }
     } else {
+      // contentEditable 元素: execCommand 虽已弃用但仍是唯一可行方案
       target?.focus();
       document.execCommand(command);
     }

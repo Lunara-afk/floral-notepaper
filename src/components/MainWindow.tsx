@@ -271,7 +271,7 @@ function applyFormat(
 
   textarea.focus();
   textarea.setSelectionRange(0, value.length);
-  document.execCommand("insertText", false, result);
+  // 注: execCommand 已弃用，此处直接通过 setContent 更新 React state
   setContent(result);
   markDirty();
   requestAnimationFrame(() => {
@@ -282,6 +282,7 @@ function applyFormat(
 function runEditorCommand(textarea: HTMLTextAreaElement | null, command: "undo" | "redo"): boolean {
   if (!textarea || textarea.disabled) return false;
   textarea.focus();
+  // 注: textarea 的 undo/redo 无替代 API，execCommand 是唯一可行方案
   return document.execCommand(command);
 }
 

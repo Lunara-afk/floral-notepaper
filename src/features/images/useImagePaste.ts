@@ -50,7 +50,14 @@ export function insertTextAtCursor(
   const insertion = (needsLeadingNewline ? "\n" : "") + text + "\n";
 
   textarea.focus();
-  document.execCommand("insertText", false, insertion);
+  // 注: execCommand 已弃用，改用直接值操作
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const before = textarea.value.slice(0, start);
+  const after = textarea.value.slice(textarea.selectionEnd ?? 0);
+  textarea.value = before + insertion + after;
+  const newCursor = start + insertion.length;
+  textarea.selectionStart = textarea.selectionEnd = newCursor;
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
   setContent(textarea.value);
 }
 
