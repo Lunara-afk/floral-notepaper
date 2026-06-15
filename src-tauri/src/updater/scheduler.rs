@@ -1,17 +1,36 @@
 use super::{commands, settings, types::UpdateErrorDto, UpdatePaths, UpdaterState};
 use crate::services::notes::AppError;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{thread, time::Duration};
 use tauri::{AppHandle, Emitter, Manager};
 
 const INITIAL_DELAY: Duration = Duration::from_secs(3);
 const POLL_INTERVAL: Duration = Duration::from_secs(60);
 
+/// Shutdown flag for the auto-check scheduler thread.
+/// Set to `true` on app exit to allow graceful thread termination.
+static SCHEDULER_SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
+/// Signal the scheduler thread to shut down gracefully on the next loop iteration.
+pub fn stop_auto_check_scheduler() {
+    SCHEDULER_SHUTDOWN.store(true, Ordering::Relaxed);
+}
+
+/// Reset the shutdown flag (useful for testing or reinitialization).
+pub fn reset_scheduler_shutdown() {
+    SCHEDULER_SHUTDOWN.store(false, Ordering::Relaxed);
+}
+
 pub fn start_auto_check_scheduler(app: AppHandle) {
     thread::spawn(move || {
         thread::sleep(INITIAL_DELAY);
 
         loop {
+            if SCHEDULER_SHUTDOWN.load(Ordering::Relaxed) {
+                break;
+            }
+
             if let Err(error) = poll_auto_check(&app, Utc::now()) {
                 eprintln!("failed to run automatic update check: {error}");
                 let payload =
@@ -22,6 +41,10 @@ pub fn start_auto_check_scheduler(app: AppHandle) {
             }
 
             thread::sleep(POLL_INTERVAL);
+
+            if SCHEDULER_SHUTDOWN.load(Ordering::Relaxed) {
+                break;
+            }
         }
     });
 }

@@ -483,5 +483,9 @@ pub fn run() {
                     }
                 }
             }
+
+            if matches!(_event, tauri::RunEvent::Exit) {
+                updater::scheduler::stop_auto_check_scheduler();
+            }
         });
 }
